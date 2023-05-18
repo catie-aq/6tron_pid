@@ -153,6 +153,8 @@ public:
      */
     void compute(PID_args *args);
 
+    void reset();
+
 private:
     // Current PID format
     PID_format _format;

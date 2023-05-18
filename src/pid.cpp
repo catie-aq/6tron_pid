@@ -240,4 +240,17 @@ float PID::getValue(PID_value value)
     }
 }
 
+void PID::reset()
+{
+
+    _i_count = 0.0f;
+    _i = 0.0f;
+
+    _d = 0.0f;
+    _d_input_previous = 0.0f;
+
+    _target_clamped = 0.0f;
+
+}
+
 } // namespace sixtron
