@@ -22,6 +22,46 @@
 
 namespace sixtron {
 
+PID::PID(PID_params pid_parameters):
+        _format(pid_parameters.format),
+        _dt(pid_parameters.dt_seconds),
+        _kp(pid_parameters.Kp),
+        _ki(pid_parameters.Ki),
+        _kd(pid_parameters.Kd),
+        _kf(pid_parameters.Kf),
+        _target_clamped(0.0f),
+        _err(0.0f),
+        _err_previous(0.0f),
+        _i_count(0.0f),
+        _d_input_previous(0.0f),
+        _output_previous(0.0f),
+        _anti_windup(pid_parameters.anti_windup),
+        _output_clamp(false),
+        _i_count_previous(0.0f)
+{
+    // Tf must be superior or equal to _dt, it's not a filter otherwise.
+    if (_kf < 1.0f)
+        _kf = 1.0f;
+
+    // Set all limits to 0 (unlimited power)
+    setLimit(PID_limit::input_limit_HL, 0.0f);
+    setLimit(PID_limit::output_limit_HL, 0.0f);
+
+    // Set ramp
+    _target_delta_limit_high = (pid_parameters.ramp_high > RAMP_DEFAULT)
+            ? (pid_parameters.ramp_high * _dt)
+            : RAMP_DEFAULT;
+    _target_delta_limit_low = (pid_parameters.ramp_low > RAMP_DEFAULT)
+            ? (pid_parameters.ramp_low * _dt)
+            : RAMP_DEFAULT;
+
+    if ((_target_delta_limit_high == RAMP_DEFAULT) && (_target_delta_limit_low == RAMP_DEFAULT)
+            && (pid_parameters.ramp > RAMP_DEFAULT)) {
+        _target_delta_limit_high = pid_parameters.ramp * _dt;
+        _target_delta_limit_low = pid_parameters.ramp * _dt;
+    }
+}
+
 PID::PID(float Kp,
         float Ki,
         float Kd,
@@ -30,72 +70,55 @@ PID::PID(float Kp,
         float Kf,
         PID_format format,
         bool anti_windup):
-        _format(format),
-        _dt(dt_seconds),
-        _kp(Kp),
-        _ki(Ki),
-        _kd(Kd),
-        _kf(Kf),
-        _target_clamped(0.0f),
-        _target_delta_limit(ramp),
-        _err(0.0f),
-        _err_previous(0.0f),
-        _i_count(0.0f),
-        _d_input_previous(0.0f),
-        _output_previous(0.0f),
-        _anti_windup(anti_windup),
-        _output_clamp(false),
-        _i_count_previous(0.0f)
+        PID(PID_params {
+                Kp, Ki, Kd, Kf, dt_seconds, ramp, RAMP_DEFAULT, RAMP_DEFAULT, format, anti_windup })
 {
-
-    // Tf must be superior or equal to _dt, it's not a filter otherwise.
-    if (_kf < 1.0f)
-        _kf = 1.0f;
-
-    // Set all limits to 0 (unlimited power)
-    setLimit(PID_limit::input_limit_HL, 0.0f);
-    setLimit(PID_limit::output_limit_HL, 0.0f);
 }
 
 PID::PID(PID_params pid_parameters, float dt_seconds):
-        PID(pid_parameters.Kp,
+        PID(PID_params { pid_parameters.Kp,
                 pid_parameters.Ki,
                 pid_parameters.Kd,
+                pid_parameters.Kf,
                 dt_seconds,
                 pid_parameters.ramp,
-                pid_parameters.Kf,
+                pid_parameters.ramp_high,
+                pid_parameters.ramp_low,
                 pid_parameters.format,
-                pid_parameters.anti_windup)
-{
-}
-
-PID::PID(PID_params pid_parameters):
-        PID(pid_parameters.Kp,
-                pid_parameters.Ki,
-                pid_parameters.Kd,
-                pid_parameters.dt_seconds,
-                pid_parameters.ramp,
-                pid_parameters.Kf,
-                pid_parameters.format,
-                pid_parameters.anti_windup)
+                pid_parameters.anti_windup })
 {
 }
 
 // Must be called periodically at "_dt"
+// #include "mbed.h"
 void PID::compute(PID_args *args)
 {
 
     // RAMP
-    if (_target_delta_limit != 0.0f) {
-        if ((args->target - _target_clamped) > _target_delta_limit) {
-            _target_clamped += _target_delta_limit;
+    if (_target_delta_limit_high > RAMP_DEFAULT || _target_delta_limit_low > RAMP_DEFAULT) {
 
-        } else if ((args->target - _target_clamped) < -_target_delta_limit) {
-            _target_clamped += -_target_delta_limit;
+        float diff = args->target - _target_clamped; //
+        float delta_limit = 0.0f;
 
+        if (((args->target > _target_clamped) && (diff > 0.0f) && (_target_clamped >= 0.0f))
+                || ((args->target < _target_clamped) && (diff < 0.0f)
+                        && (_target_clamped <= 0.0f))) {
+            // Acceleration, either from 0 to 1 or from 0 to -1
+            delta_limit = _target_delta_limit_high;
+        } else {
+            // Deceleration, either from 1 to 0 or from -1 to 0
+            delta_limit = _target_delta_limit_low;
+        }
+
+        // Use the delta limit calculated above.
+        if (diff > delta_limit) {
+            _target_clamped += delta_limit;
+        } else if (diff < -delta_limit) {
+            _target_clamped -= delta_limit;
         } else {
             _target_clamped = args->target;
         }
+
     } else {
         _target_clamped = args->target;
     }
@@ -250,7 +273,6 @@ void PID::reset()
     _d_input_previous = 0.0f;
 
     _target_clamped = 0.0f;
-
 }
 
 } // namespace sixtron

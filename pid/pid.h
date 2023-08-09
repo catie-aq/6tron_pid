@@ -77,8 +77,10 @@ struct PID_params {
     float Ki = 0.0f;
     float Kd = 0.0f;
     float Kf = 1.0f;
-    float dt_seconds = 0.0f;
-    float ramp = RAMP_DEFAULT;
+    float dt_seconds = 0.0f; // In seconds
+    float ramp = RAMP_DEFAULT; // Trapezoid ramp, same for High and Low.
+    float ramp_high = RAMP_DEFAULT; // Delta max when ramping up (positive or negative). Discard "ramp" var if set.
+    float ramp_low = RAMP_DEFAULT; // Delta max when ramping down (positive or negative). Discard "ramp" var if set.
     PID_format format = PID_DEFAULT;
     bool anti_windup = true;
 };
@@ -179,7 +181,7 @@ private:
     float _limit_out_low;
 
     // PID calculs
-    float _target_clamped, _target_delta_limit;
+    float _target_clamped, _target_delta_limit_high, _target_delta_limit_low;
     float _err, _err_previous, _i_count;
     float _p, _i, _d; // Corrector terms
     float _d_input, _d_input_previous; // used for parallel and serie PID
