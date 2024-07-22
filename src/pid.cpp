@@ -273,6 +273,9 @@ void PID::reset()
     _d_input_previous = 0.0f;
 
     _target_clamped = 0.0f;
+
+    _err_previous = 0.0f;
+    _output_previous = 0.0f;
 }
 
 } // namespace sixtron
